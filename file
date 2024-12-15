@@ -1,0 +1,75 @@
+const { ethers } = require("ethers");
+require("dotenv").config();
+
+// Polygon and Ethereum RPC URLs
+const ETHEREUM_RPC = "https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID";
+const POLYGON_RPC = "https://rpc-mainnet.maticvigil.com/";
+
+// Bridge smart contract addresses (replace with actual contracts)
+const BRIDGE_CONTRACT_ETH = "0xYourEthereumBridgeContractAddress"; // Ethereum Bridge Contract
+const BRIDGE_CONTRACT_POLYGON = "0xYourPolygonBridgeContractAddress"; // Polygon Bridge Contract
+
+// Token contract details (ERC20)
+const TOKEN_CONTRACT_ADDRESS = "0xYourERC20TokenAddress"; // ERC20 Token Address
+const TOKEN_ABI = [
+  "function transfer(address to, uint amount) public returns (bool)",
+  "function balanceOf(address owner) public view returns (uint)"
+];
+
+// Wallet details (using environment variables for security)
+const PRIVATE_KEY = process.env.PRIVATE_KEY; // Your wallet private key
+const WALLET_ADDRESS = process.env.WALLET_ADDRESS; // Your wallet address
+
+// Connect to Ethereum and Polygon using providers
+const ethProvider = new ethers.JsonRpcProvider(ETHEREUM_RPC);
+const polygonProvider = new ethers.JsonRpcProvider(POLYGON_RPC);
+
+// Create wallet instance
+const wallet = new ethers.Wallet(PRIVATE_KEY, ethProvider);
+
+// Set up token contract on Ethereum
+const tokenContractETH = new ethers.Contract(TOKEN_CONTRACT_ADDRESS, TOKEN_ABI, wallet);
+
+// Connect to Polygon using a different provider (after transaction)
+const walletOnPolygon = new ethers.Wallet(PRIVATE_KEY, polygonProvider);
+const tokenContractPolygon = new ethers.Contract(TOKEN_CONTRACT_ADDRESS, TOKEN_ABI, walletOnPolygon);
+
+// Amount to bridge (in smallest token unit, e.g., Wei for ETH or the smallest token unit for ERC20)
+const amountToBridge = ethers.parseUnits("10", 18); // Example: 10 tokens (ERC20)
+
+async function bridgeTokens() {
+  try {
+    // 1. Check balance on Ethereum
+    const balance = await tokenContractETH.balanceOf(WALLET_ADDRESS);
+    console.log(`Balance on Ethereum: ${ethers.formatUnits(balance, 18)} Tokens`);
+
+    if (balance.lt(amountToBridge)) {
+      console.log("Not enough balance to bridge tokens!");
+      return;
+    }
+
+    // 2. Transfer tokens to the bridge contract on Ethereum
+    console.log("Initiating transfer to Ethereum bridge contract...");
+    const tokenApprovalTx = await tokenContractETH.approve(BRIDGE_CONTRACT_ETH, amountToBridge);
+    await tokenApprovalTx.wait();
+    console.log("Tokens approved for transfer.");
+
+    const bridgeTx = await tokenContractETH.transfer(BRIDGE_CONTRACT_ETH, amountToBridge);
+    await bridgeTx.wait();
+    console.log(`Tokens bridged to Ethereum Bridge contract: ${ethers.formatUnits(amountToBridge, 18)} Tokens`);
+
+    // Wait for cross-chain transfer to Polygon (this may take time, in a real-world case, use event listeners to check)
+
+    console.log("Tokens should be transferred to Polygon after confirmation.");
+
+    // 3. Confirm tokens on Polygon
+    const polygonBalance = await tokenContractPolygon.balanceOf(WALLET_ADDRESS);
+    console.log(`Balance on Polygon: ${ethers.formatUnits(polygonBalance, 18)} Tokens`);
+
+  } catch (error) {
+    console.error("Error bridging tokens:", error);
+  }
+}
+
+// Execute the bridging function
+bridgeTokens();
